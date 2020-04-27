@@ -1,1 +1,5 @@
-# dc_home_prices
+# Predicting Washington D.C. Home Prices
+
+The goal of this project is to explore the Washington D.C. residential property dataset. This dataset is current up to July 2018. The goal of this this analysis is generating a model to predict the price of the single-family home within Washington D.C. using the success metric of Root Mean Squared Log Error. Other goals were understanding the factors which best influence the price of a home and identifying other interesting learnings.
+
+Washington D.C. is the capital of the United States of America making it an important city in international affairs, and a popular tourist destination. The population is approximately 700,000. Being a federal capital, the government is a major employer of the city which is also home to unions, lobbying firms and non-profits. Washington D.C. is among the most expensive cities in the U.S. and it’s GDP per capita is 3 times that of the next highest state, which we expect to inflate property values. Due to building height restrictions inside the city, many major companies are headquartered just outside the city in cities in Maryland and Virginia. While this broader Washington D.C metropolitan area contains sections of these states and as well as parts of West Virginia, the dataset considered for analysis only considers homes residing inside the District of Columbia.
