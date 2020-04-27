@@ -1,0 +1,1000 @@
+---
+title: "Report"
+subtitle: Jack Swiatoschik
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Introduction 
+
+What follows is a discussion of a data exploration and modelling exercise leveraging Washington D.C. residential property dataset. This dataset is current up to July 2018. The goal of this this analysis is generating a model to predict the price of the single family home within Washington D.C. using the success metric of Root Mean Squared Log Error. Other goals were understanding the factors which best influence the price of a home and identifying other interesting learnings. 
+
+Washington D.C. is the capital of the United States of America making it an important city in international affairs, and a popular tourist destination. The population is approximately 700,000. Being a federal capital, the government is a major employer of the city which is also home to unions, lobbying firms and non-profits. Washington D.C. is among the most expensive cities in the U.S. and it's GDP per capita is 3 times that of the next highest state, which we expect to inflate property values. Due to building height restrictions inside the city, many major companies are headquartered just outside the city in cities in Maryland and Virginia. While this broader Washington D.C metropolitan area contains sections of these states and as well as parts of West Virginia, the dataset considered for analysis only considers homes residing inside the District of Columbia. 
+
+## Dataset Description 
+
+The Data set contains 29 variables (28 Predictors, and 1 Response) and a preliminary round of data processing has already taken place. An outline of the variables is given below as well as how they are presented in the dataset:
+
+- Price/ PRICE (Response Varaible)
+- Number of Bathrooms/ BATHRM: 
+- Number of Half Bathrooms/HF_BATHRM
+- Type of Heating in the Home/ HEAT
+- Whether Air Conditioning is in the house/ AC
+- Number of Rooms/ ROOMS
+- Number of Bedrooms/ BEDRM
+- The earliest time the main portion of the building was built/ AYB
+- Year structure was remodeled/YR_RMDL
+- The year an improvement was built more recent than actual year built/ EYB
+- Number stories in primary dwelling/ STORIES
+- Date of most recent sale/ SALEDATE
+- Gross building area in square feet/ GBA
+- Best description of style of the home (bi-level, 3 stories ect.)/ STYLE
+- Grade of the home/ GRADE
+- Condition of home (good, very good ect.)/ CNDTN
+- Type of Exterior wall/ EXTWALL
+- Type of Roof/ ROOF
+- Type of Interior wall/ INTWALL
+- Number of Kitchens/ KITCHENS: 
+- Number of Fireplaces/ FIREPLACES
+- Land area of property in square feet/ LANDAREA
+- Zipcode/ ZIPCODE
+- Latitude/ LATITUDE
+- Longitude/ LONGITUDE      
+- Assessment Neighbourhood (Ex: Foggy)/ ASSESSMENT_NBHD 
+- Assessment Sub-Neighbourhood/ ASSESSMENT_SUBNBHD: sub-neighborhood
+- Ward out of 8 Wards in the Discrict/ WARD
+- Quadrant of the District (Either NW,SW,NE,SE)/ QUADRANT
+
+
+
+## Data Exploration
+
+```{r,warning=FALSE,results='hold',echo=FALSE,include = FALSE}
+load("C:/Users/Jack/Desktop/Assignment 1/Final/final.rdata")
+dat2=dat
+dat3=dat
+```
+
+```{r,warning=FALSE,results='hold',include = FALSE}
+library(stats)
+library(mlr)
+library(lubridate)
+library(plyr)
+
+```
+
+
+### Sales Over Time
+```{r,warning=FALSE,results='hold',include = FALSE}
+dat$YEAR=year(dat$SALEDATE)
+dat$MONTH=month(dat$SALEDATE)
+dat$YM=dat$YEAR*100+dat$MONTH
+
+pby=ddply(dat,c("YEAR"),function(x){mean(x$PRICE)})
+nby=ddply(dat,c("YEAR"),function(x){nrow(x)})
+
+```
+
+The below graph explores how average sale prices have changed over time. Prices were consistent between 1992 to 1999, increased almost $500,000 between 2000 and 2009, and have been slowly increasing since. The increase is possible due to the housing bubble in 2000's but surprisingly there is no sharp crash between 2007-2009 as was seen in other areas of the country. As the local economy is stabilized by the presense of the recession-immune federal government, it would make sense why the economy and housing market was not particulately impacted as hard as other areas. However, it is interesting how the region still felt the increase in house price during the bubble. What is particularely interesting, is the nearby regions of the D.C. Metro area were not as insulated from the crash. 
+
+https://www.nvar.com/realtors/news/re-view-magazine/article/sep-oct-2017/2017-09-10-market-metrics-home-sales-prices-continue-to-skyrocket
+
+
+This would suggest that as the private sector businesses located outside Washington D.C. flourished, it had an upward impact on the local housing market, including Washington itself. But as the Great Recession occured, Washington D.C. itself was able to stay insulated enough as an economy and the housing market was able to stay fairly flat. 
+
+```{r}
+
+plot(pby$YEAR,pby$V1/100000,
+     main="Year of Sale vs Average Sale Price",
+     xlab="Year",
+     ylab="Average Sale Price (In $100,000)",
+     ylim=c(2,12),
+     xlim=c(1991,2019),
+     col="darkblue",
+     pch=19,
+     yaxt='n')
+axis(2, at=axTicks(2), labels=sprintf("$%s", axTicks(2)))
+abline(v=c(2007,2010),col='red',lty=3)
+legend("topleft",legend=c("Great Recession"),col="red",lty=3)
+
+```
+
+The below graph explores how the number of home sales per year has changed over time in the below graph. A clear outlier exists in 2018, and this stems from the fact that the data is only current up to July 2018. However, after these 7 months, 2018 is on pace to be higher than 2017, so the trend seen from 2008-2017 can be expected to continue in this year. There does not seem to be any correlation between the Number of Sales data, and the Average Price Data. From 2000-2010, there is a 'hump' in the number of sales, but the prices skyrocket. In this dataset, we are able to see a dip in 2007-2009 which corresponds with the Great Recession. After 2010, prices flatline, while number of sales increases. It is possible, that the increased number of sales would flood supply and flatline prices. A potential concern illustrated here, is the there are farm more observations from recent years as compared to previous years. This could potentially be a data availability issue, and there are more sales especially during the 1990s which are simply not included in this dataset. 
+
+
+```{r}
+
+plot(nby$YEAR,nby$V1,
+     main="Year of Sale vs Number of Home Sales",
+     xlab="Year",
+     ylab="Number of Home Sales",
+     xlim=c(1991,2019),
+     pch=19)
+abline(v=c(2007,2010),col='red',lty=3)
+legend("topleft",legend=c("Great Recession"),col="red",lty=3)
+
+```
+### Seasonaly Decomposing Sale Price
+
+A next step would be to see how price and number sales change month to month. Simply averaging by month is not as appropriate as year, since a house sale in January 1992 would be grouped with a house in January 2005, and if there were more sales in specific months in specific years they interpretation of results could be skewed by the long term year-to-year trend. It then makes sense to seasonally decompose our data to get that insight. We begin by looking at prices. 
+
+```{r,warning=FALSE,results='hold',include = FALSE}
+pbym=ddply(dat,c("YM"),function(x){mean(x$PRICE)})
+nbym=ddply(dat,c("YM"),function(x){nrow(x)})
+```
+
+
+As the bars on the right hand side are of equal size in terms of dollars, year-to-year changes have a larger impact than month-to-month price changes. The error has a large influence meaning simply using month and year is not a terrific predictor. Nevertheless, it is intersting too see which months see homes sell for more.  
+
+```{r}
+pricets <- ts(pbym$V1, start=c(1992, 1), end=c(2018, 7), frequency=12)
+plot(stl(pricets,"periodic"),
+     main="Seasonal Decomposition of Price by Month")
+```
+
+
+Houses sell higher than average during the summer months (May-August), as well as in December. September is the worst month to sell in. A potential reasoning would be that parents would be reluctant to move during the school year, and especially at the beginning of the school year in September. This would reduce the list of potential buyers and cause fewer bidding wars which would reduce prices. Another possible explaination is that moving is easier in the summer months due to better weather, and people are more inclinded to deal with the logistics involved when weather is favourable. However, because month to month seasonality does not have a massive impact on prices as shown by the seasonal decomposition, these insights should be discounted. 
+
+```{r}
+t=stl(pricets,"periodic")
+v<-c(-26917.433,-17093.452,-21007.154,-24386.72,48269.271,
+48125.553,38298.035,29737.03,-56190.989,-24872.189,-4243.216,10281.264)
+m<-c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+
+plot(1:12,v,
+     ylab="Price Compared to Average Month",
+     xlab="Month",
+     xaxt='n',
+     type='l',
+     main="Impact of Month on Sale Price",
+     ylim=c(-60000,60000),
+     yaxt='n')
+
+axis(2, at=axTicks(2), labels=sprintf("$%s", axTicks(2)))
+
+
+lines(1:12,rep(0,12),lty=3,
+      col='red')
+legend("topright",legend="Selling Price\n in Average Month",col="red",lty=3)
+
+axis(1, at=1:12, labels=m)
+
+```
+### Seasonaly Decomposing Number of Sales
+
+The bars on the right hand side are of equal size in terms of number of house sales. Again as in the seasonal decomposition of prices,  year-to-year changes have a larger impact than month-to-month price changes. The error has a large influence meaning simply using month and year is not a terrific predictor. Nevertheless, it is intersting too see which months see more home sales.  
+
+```{r}
+pricets <- ts(nbym$V1, start=c(1992, 1), end=c(2018, 7), frequency=12)
+plot(stl(pricets,"periodic"),
+     main="Seasonal Decomposition of Number of Sales")
+```
+
+The monthly trend is similar for number of sales as it is to the price. The summer months (May-August) as well as December see a larger number of house sales. This suggests that more people are interest in buying houses in the summer, and because of this more people are interested in selling hence more sales. An interesting difference is that September is an average month in terms of number of homes sold, but well below average in the average price.
+
+```{r}
+numts <- ts(nbym$V1, start=c(1992, 1), end=c(2018, 7), frequency=12)
+
+t=stl(numts,"periodic")
+
+v<-c(-6.6733537,-15.0186726,-6.364002,-4.0649589,4.6414928,14.2211698,10.1712309,6.270203,0.1294647,-0.6852389,-4.4230172,1.7956837)
+
+m<-c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+
+plot(1:12,v,
+     ylab="Number of Sales Compared to Average Month",
+     xlab="Month",
+     xaxt='n',
+     type='l',
+     main="Impact of Month on Number of Sales",
+     ylim=c(-20,20))
+
+lines(1:12,rep(0,12),lty=3,
+      col='red')
+
+legend("topright",legend="Average Month",col="red",lty=3)
+
+axis(1, at=1:12, labels=m)
+
+```
+### Location Analysis
+
+Assessing the quadrant locations of the houses, they appear to be representitive of Washington D.C. and not skewed. The large majority (8245) are in the North West Quandrant, and the fewest (31) are in the South West Quadrant. This is unsurprising. The South West Quandrant is the smallest of the 4 quadrants, and contains mostly of non-residential buildings such as the Jefferson Memorial, the Southern Part of the National Mall, and the Joint Base Anacostia–Bolling military base. Only the Southern most point in Bellevue contains large sections of residential land. The South East quadrant contains the second least number of houses. This is the second smallest quadrant and contains Capital Hill, Navy Yard and Hill East, non residential districts, but contains more residential sections further South and East. The NorthWest Quadrant contains by far the most homes. It is the largest by area, and contains the majority of the residential sections of Washington DC.
+
+```{r}
+counts <- table(dat$QUADRANT)
+barplot(counts, main="Quandrant Distribution",
+   xlab="Quandrant",
+   ylab="Number of Houses",
+   col="firebrick",
+   ylim=c(0,10000))
+```
+
+Conducting a similar analysis on wards, the findings are continued. There are very few houses from Wards, 1,2 and 6. These Wards being those which contain and surround the centre of the city. Wards 3 and 4 are in the North West and have massive residential areas, Ward is in the North East and has mostly residential area as well, and Wards 7 and 8 cover the eastern tip and South/South East respectively. 
+
+```{r}
+counts <- table(dat$WARD)
+bp <- barplot(counts, main="Ward Distribution",
+   xlab="Ward",
+   ylab="Number of Houses",
+   col="firebrick",
+   ylim=c(0,5500))
+
+```
+
+While having among the smallest supply, Ward 2 has the highest median price at approximately $2.5 Million. This is not surprisingy as ward 2 is located right in the heart of downtown and contains the White House, Capital Building, and National Mall. These factors would make it a desireable place to live, and the minimal area for residential homes would create an upward force on prices. 
+
+```{r}
+counts <- ddply(dat,"WARD",function(x){median(x$PRICE/100000)})
+
+balance<- counts[,2]
+barnames<-counts[,1]
+barplot(balance,ylim=c(0,27),names.arg= barnames,   
+  main="Median Price by Ward",
+  col='darkblue',
+   xlab="Ward",
+   ylab="Price (in $100,000)",
+  yaxt="n")    
+
+axis(2, at=axTicks(2), labels=sprintf("$%s", axTicks(2)))
+
+```
+
+These insights can be better illustrated on a map of DC. Where the darker colours correspond to the cheaper homes, and red color corresponds to more expensive. The South and East (Wards 7 and 8) have a large number of homes but they are cheaper. There is another cluster in the North East (Ward 5) which is mostly dark with some red. The NorthWest clearly clearly has the largest number of homes, and this area is also sum of the most red. Houses get more expensive (redder) as you get closer to downtown. 
+
+```{r,warning=FALSE,results='hold',include = FALSE}
+library(ggmap)
+register_google(key = "AIzaSyBKmRB9-BIUQp_Asq3KI2Wuk_w-I0A2Vls")
+map <- get_map(location=c(lon=-77.0187,lat=38.91), maptype = "roadmap", zoom=12)
+```
+
+
+```{r,warning=FALSE}
+colp<-c()
+
+for (i in 1:20){
+   colp<-c(colp,rgb(0.05+i*0.035,0.05-0.0025*i,0.05-0.0025*i,1))
+}
+
+
+dat$Col <- colp[as.numeric(cut(dat$PRICE,breaks = quantile(dat$PRICE,seq(0,1,0.05))))]
+
+ggmap(map) + geom_point(aes(x=LONGITUDE, y=LATITUDE),alpha=0.09,color=dat$Col, data=dat)
+
+
+```
+
+### Size of Homes
+
+Assessing the distribution of building size, the majority of homes are between 1500 and 2500 square feet with a median of 1857. This is right in line with the national median of 1600. The fact that D.C. is above average is slightly surprising considering it is an urban city and would be expected to have more tighly-packed smaller homes compared to the rest of the country which would include larger homes in rural areas of the country. 
+
+https://www.theatlantic.com/family/archive/2019/09/american-houses-big/597811/
+
+```{r}
+(quantile(dat$GBA,c(0.01,0.25,0.5,0.75,0.99)))
+```
+
+Tracking how land and building area have changed over time yields interesting insights. For the analysis `AYB` (The earliest time the main portion of the building was built) is utilized to track how the shape of D.C. homes have changed over time. From the 1960s to 1990s, both land area and house area increase, land from 6000 to 8000 square feet, and building area from 2000 to 3500 square feet. Since the 1990s, both land area and home size has been decreasing albeit at differing rates.
+
+Interestingly, from the 1960s to 2000s, Washington D.C. also witnessed a decline in population, and having the population density decrease over this time would make it possible for the increase in the size of land area and building size of houses.
+
+https://www.dcpolicycenter.org/publications/regional-population-density-since-1970/
+
+```{r}
+dat$AYB2<-round(dat$AYB/10)
+group=ddply(dat,"AYB2",function(x){c(mean(x$GBA,trim=0.5),mean(x$LANDAREA,trim=0.5),mean(x$GBA/x$LANDAREA),nrow(x))})
+group=group[group$AYB2>189,]
+group=group[group$AYB2<202,]
+
+plot(group$AYB2*10,group$V2,type='l',
+     main="Average Land and Building Area of Homes over Time",
+     xlab='Decade',
+     ylab="Average Area Over Time",
+     ylim=c(0,8000),
+     col="darkblue",
+     lwd=2)
+lines(group$AYB2*10,group$V1,
+      col="firebrick",
+      lwd=2)
+
+legend("topleft",legend=c("Land Area","Building Area"),col=c("darkblue","firebrick"),lwd=2)
+
+```
+
+A follow up would be to see how the rate of building area and land area has changed over the decades. Since the 1960s, the home's share of area has been increasing as new builds try to optimize housing area on smaller lots. This is a trend which has been seen nationally. 
+
+https://www.theatlantic.com/business/archive/2016/07/lawns-census-bigger-homes-smaller-lots/489590/
+
+```{r}
+plot(group$AYB2*10,group$V3,type='l',
+     main='Average Building to Land Area Ratio Over Time',
+     xlab='Decade',
+     ylab="Average Building to Land Area Ratio",
+     lwd=2)
+```
+
+
+### Impact of Home Size on Price
+
+Investigating the impact of building and land area on price, there is a weak correlation between the log transform of land area and the log of price, but a strong correlation between the log of the building area and the log of the price. 
+
+```{r}
+plot(log(dat$GBA),log(dat$PRICE),
+     col=adjustcolor( "darkblue", alpha.f = 0.1),
+     pch=19,
+     ylab='Log of Price',
+     xlab='Log of Bulding Area',
+     main='Log of Price vs Log of Building Area')
+
+plot(log(dat$LANDAREA),log(dat$PRICE),
+     col=adjustcolor( "darkblue", alpha.f = 0.1),
+     pch=19,
+     ylab='Log of Price',
+     xlab='Log of Land Area',
+     main='Log of Price vs Log of Land Area')
+
+```
+
+### Analysis of House Remodels
+
+Assessing the number of remodellings by year, there are 3 distinct trends. Firstly, a sharp and sudden increase in the number of remodels beginning in 2000 and continuing until 2007. Between 2007 and 2009 the number of remodels declines almost 25% , but begins to increase again after this. This is of particular interest because while the Great recession did not seem to impact the price of homes greatly in Washington D.C. it appears to have hindered appetite for major, expesive remodelings. Finally, remodelled homes are typically sold very soon after the remodel, 0-2 years is the most common time between a remodel and a sale of home.
+
+```{r}
+dat$EYB2=5*round(dat$EYB/5)
+df=ddply(dat,"YR_RMDL",function(x){nrow(x)})
+
+plot(df[1:(nrow(df)-2),1],df[1:(nrow(df)-2),2],type='l',
+     ylim=c(0,500),
+     xlab="Year",
+     ylab="Number of Remodels",
+     main="Remodels By Year",
+     col="darkblue",
+     lwd=2)
+abline(v=c(2007,2010),col='red',lty=3)
+legend("topleft",legend=c("Great Recession"),col="red",lty=3)
+
+```
+
+```{r}
+hist(c(dat$YEAR-dat$YR_RMDL)[dat$YEAR-dat$YR_RMDL>0],
+     breaks=40,
+     xlab="Age of Remodel",
+     ylab="Number of Remodels",
+     main="Age of Remodel vs Time to Sale",
+     col=adjustcolor("darkblue",0.7))
+
+```
+
+### Analysis of Condition
+
+Assessing condition grades given out, the majority of homes are given a grade of Average or Good. Very few are given Excellent, Poor or Fair grades. A follow up would be to assess how remodels impact the grade a home is give. 
+
+```{r}
+tab=table(as.factor(dat$CNDTN))
+
+barplot(tab[c(5,3,1,4,6,2)],
+        xlab="Grade",
+        ylab='Number of Homes',
+        main="Distribution of Condition",
+        col="firebrick",
+        ylim=c(0,8000))
+```
+
+Plotting the interaction between remodelling and receiving an above average condition shows a strong relation. One predicts the other at at a rate of approximately 66%.
+
+```{r,warning=FALSE}
+dat$cnd_clust=1*(dat$CNDTN%in%c("Good","Very Good","Excellent"))
+dat$rmd<-1-1*is.na(dat$YR_RMDL)
+
+d=ddply(dat,c("cnd_clust","rmd"),function(x){nrow(x)})
+barplot(d[,3]/sum(d[,3]),
+        col=c("darkgreen","firebrick","firebrick","darkgreen"),
+        ylim=c(0,0.5),
+        main="Remodelling and Above Average Grade Relationship",
+        yaxt="n",
+        ylab="Percent of Population")
+axis(2, at=axTicks(2), labels=paste(axTicks(2)*100,"%"))
+
+
+
+lab=c("Below Average Grade/\nNo Remodel","Below Average Grade/\nRemodel",
+      "Above Average Grade/\nNo Remodel","Above Average Grade/\nRemodel")
+
+text(x=1:4-0.3, y=-0.09, lab, xpd=TRUE, srt=25,
+     cex=0.9)
+
+text(x=c(0.7,1.9,3.1,4.3), y=d[,3]/sum(d[,3])+0.03, paste(round(d[,3]*100/sum(d[,3]),1),"%"),las=1)
+
+```
+
+## Pre-Processing 
+
+After exploring the data, some steps should be taken prior to modelling with the data. The majority of the columns do not have any missing data, however those which do should be treated. Additionally, some light feature engineering is suggested based on the type of data in each column. The following sections describe how missing data is treated for different levels, and what transformations we take of explanatory variables. 
+
+### Missing Data
+
+```{r}
+colSums(is.na(dat))
+```
+
+* QUADRANT: replace with new class names "Unknown".
+* KITCHENS: Replace with the mean number of KITCHENS in the non-missing data
+* AYB: Replace with the mean value of AYB in the non-missing data
+* STORIES: Replace with the mean value of STORIES in the non-missing data
+* ASSESSMENT_SUBNBHD: Replace all classes not found in training set with "Missing", this will cover both Missing data and levels not found in the training data.
+* ASSESSMENT_SUBNBHD: Replace all classes not found in training set with "Missing", this will cover both Missing data and levels not found in the training data. 
+
+
+### Transformation
+* PRICE: A log transformation of the response variate PRICE.
+* GBA: Log transformation
+* LANDAREA: Log transformation
+* SALEDATE: Extract year and month
+* age_of_ren: Which is YR_RMDL-year or EYB-year if YR_RMDL is not available 
+* FIRE: Convert to 3 levels, whether the value is 0,1,2 or >2
+* Lat1: Indicator variable whether Lat is greater 38.905 (This roughly partitions the data in to the NW/NE and SW/SE Quadrants, see map of D.C. previously)
+* HOTMONTH:  Grouped Variable whether the month was April - August, December or other
+* GRADECUT: Group GRADE levels with similar prices into 4 groups
+* roof1: Group roof levels with similar prices into 4 groups
+* AGE: YEAR - AYB
+* AGE_RENO: YEAR-EYB
+
+
+
+#### Motivation for Transformations
+
+
+Assessing the mean house price by ZipCode, a new variable GOODZIP is created as an indicator whether the home is in the top 5 zip codes by average home price. 
+
+```{r,warning=FALSE}
+d=ddply(dat[dat$Usage=="Training",],"ZIPCODE",function(x){mean(x$PRICE)})
+d=d[order(-d[,2]),]
+barplot(d[,2]/100000,d[,1],
+        names.arg = d[,1],
+        las=2,
+        ylab="Home Price (In $100,000)",
+        xlab="",
+        main="Average Home Price by Zip Code",
+        col="darkblue",
+        ylim=c(0,20),
+        yaxt="n")
+axis(2, at=axTicks(2), labels=sprintf("$%s", axTicks(2)))
+
+```
+
+Recalling the plot of home prices over time, prices were fairly flat after 2006 and before 2001. To create a more linear relationship, the variable YEAR1 is created. This is a variable which is the same value (2000) for all years before 2001. The value is the year of sale if the home was sold between 2001 and 2005 and 2006 if the home was sold after 2005. 
+
+```{r,warning=FALSE}
+dat$YEAR=year(dat$SALEDATE)
+dat$YEAR1=2006*(dat$YEAR>2006)+2000*(dat$YEAR<2000)+(dat$YEAR>1999&dat$YEAR<2007)*dat$YEAR
+
+d=ddply(dat[dat$Usage=="Training",],"YEAR1",function(x){mean(x$PRICE)})
+d=d[order(-d[,2]),]
+plot(d[,1],d[,2]/100000,
+        las=1,
+        ylab="Home Price (In $100,000)",
+        xlab="'New Year'",
+        main="Average Home Price by Adjusted Year",
+     pch=19,
+     col="darkblue",
+     cex=1.4,
+     yaxt="n")
+
+axis(2, at=axTicks(2), labels=sprintf("$%s", axTicks(2)))
+
+
+```
+
+
+Grouping on Grade given to a home, we few consolidations are made. A highest group with Exceptional (A/B/C/D) group 3, a second with Superior and Excellent group 1, and a final group with Low Quality, Fair Quality, Average, and Above Average group 2. The middle group is kept as a control. These values will be stored as factor in the variable GRADECUT. 
+
+```{r,warning=FALSE}
+
+d=ddply(dat[dat$Usage=="Training",],"GRADE",function(x){mean(x$PRICE)})
+d=d[order(-d[,2]),]
+d$ord=1:nrow(d)
+plot(d[,3],d[,2]/100000,
+     las=2,
+     xaxt="n",
+     ylab="Home Price (In $100,000)",
+     xlab="",
+     main="Average Home Price by Grade",
+     pch=19,
+     col="darkblue",
+     cex=1.4,
+     yaxt="n",
+     las=2)
+axis(2, at=axTicks(2), labels=sprintf("$%s", axTicks(2)))
+
+abline(h=median(dat[dat$Usage=="Training","PRICE"])/100000,lty=3)
+labs <- d[,c(1)]
+text(x=1:12, y=-11.7, labs, xpd=TRUE, srt=90,
+     cex=0.9)
+
+legend("topright",legend=c("Average House Price"),col="black",lty = 3)
+
+```
+
+
+Feature Engineering for GBM and RF
+
+```{r}
+
+  Mode <- function(x) {
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
+  }
+
+
+  feature_eng<-function(df){
+    df$AYB[is.na(df$AYB)]<-mean(na.omit(df$AYB)) 
+    df$KITCHENS[is.na(df$KITCHENS)]<-mean(na.omit(df$KITCHENS)) 
+    
+    df$YEAR=year(df$SALEDATE)
+    df$MONTH=month(df$SALEDATE)
+    df$GOODZIP<-1*(df$ZIPCODE%in%c(20007,20008,20016,20037,20005))
+    df$ZIPCODE<-factor(df$ZIPCODE)
+    df$STORIESCUT<-1*(df$STORIES>2)
+    df$GRADECUT<-1*(df$GRADE%in%c("Excellent","Superior"))+
+      3*(df$GRADE%in%c("Exceptional-D","Exceptional-C","Exceptional-B","Exceptional-A"))+
+      2*(df$GRADE%in%c("Average","Low Quality","Fair Quality",'Above Average'))
+    
+    
+    df$roof1<-1*(df$ROOF%in%c("Slate","Shake","Shingle"))+
+      0*(df$ROOF%in%c("Built Up","Comp Shingle","Metal- Sms",'Typical',"Wood- FS","Composition Ro"))+
+      2*(df$ROOF%in%c("Clay Tile","Neopren","Metal- Cpr","Concrete Tile"))+
+      -1*(df$ROOF%in%c("Metal- Pre","Composition Ro","Comp Shingle"))
+    df$roof1<-factor(df$roof1)
+    
+    df$GRADECUT=factor(df$GRADECUT)
+    df$TEMP=1*(df$HEAT%in%c("Warm Cool","Forced Air"))
+    df$HFB=1*(df$HF_BATHRM>0)
+    df$FIRE=0*(df$FIREPLACES==0)+1*(df$FIREPLACES==1)+2*(df$FIREPLACES==2)+3*(df$FIREPLACES>2)
+    df$FIRE=factor(df$FIRE)
+    df$HOTMONTH=factor(1*(df$MONTH%in%c(4,5,6,7,8))+2*(df$MONTH==12))
+    df$AGE<-(df$YEAR-df$AYB)
+    df$BuiltAfter<-1*(df$AGE<0)
+    
+    
+    df$YEAR1=2006*(df$YEAR>2006)+2000*(df$YEAR<2000)+(df$YEAR>1999&df$YEAR<2007)*df$YEAR
+    
+    df$AGE_RENO<-df$YEAR-df$EYB
+    
+    df$Lat1<-1*(df$LATITUDE>38.905)
+    df$Lat1<-factor(df$Lat1)
+    
+    df$QUADRANT<-as.character(df$QUADRANT)
+    df$QUADRANT[is.na(df$QUADRANT)]<-"Unknown"
+    df$QUADRANT<-factor(df$QUADRANT)
+    
+    df$age_of_ren<-df$YR_RMDL-df$YEAR
+    df[is.na(df$age_of_ren),"age_of_ren"]<-df[is.na(df$age_of_ren),"EYB"]-df[is.na(df$age_of_ren),"YEAR"]
+    
+    #df$INTWALL[!(df$INTWALL%in%c("Carpet", "Ceramic Tile", "Default", "Hardwood", "Hardwood/Carp",
+    #                             "Lt Concrete", "Parquet","Terrazo", "Vinyl Sheet", "Wood Floor"))]<-"Default"
+    #df$INTWALL[is.na(df$INTWALL)]<-"Default"
+    
+    for (i in 1:ncol(df)){
+      df[is.na(df[,i]),i]<-Mode(df[!is.na(df[,i]),i])
+    }
+    
+    missing_ZIPCODE=c(1:nrow(df))[!df$ZIPCODE%in%c(20009,20002,20003,20007,20016,20015,20008,20011,20012,20010,
+                                                   20001,20017,20018,20019,20020,20032)]
+    df[missing_ZIPCODE,"ZIPCODE"]<-Mode(df$ZIPCODE[df$ZIPCODE%in%c(20009,20002,20003,20007,20016,20015,20008,20011,20012,20010,
+                                                                   20001,20017,20018,20019,20020,20032)])
+    
+    missing_QUADRANT=c(1:nrow(df))[!df$QUADRANT%in%c("NW","NE","SE","SW")]
+    df[missing_QUADRANT,"QUADRANT"]<-"Missing"
+    missing_WARD=c(1:nrow(df))[!df$WARD%in%c("Ward 2","Ward 6","Ward 3","Ward 4","Ward 1","Ward 5","Ward 7","Ward 8")]
+    df[missing_WARD,"WARD"]<-"Missing"
+    missing_ASSESSMENT_NBHD=c(1:nrow(df))[!df$ASSESSMENT_NBHD%in%c("Old City 2","Capitol Hill","Old City 1","Georgetown",                
+                                                                   "Palisades","Berkley","Foxhall","Kent",                        
+                                                                   "Wesley Heights","American University","Spring Valley","Chevy Chase",                 
+                                                                   "North Cleveland Park","Cleveland Park","Wakefield","Observatory Circle",          
+                                                                   "Forest Hills","Woodley","Massachusetts Avenue Heights","Kalorama",                    
+                                                                   "Garfield","Hawthorne","Crestwood","16th Street Heights",         
+                                                                   "Brightwood","Shepherd Heights","Colonial Village","Mt. Pleasant",                
+                                                                   "Petworth","Ledroit Park","Chillum","Takoma Park",                 
+                                                                   "Brookland","Riggs Park","Eckington","Brentwood",                   
+                                                                   "Woodridge","Michigan Park","Deanwood","Lily Ponds",                  
+                                                                   "Marshall Heights","Fort Dupont Park","Hillcrest","Anacostia",                   
+                                                                   "Randle Heights","Barry Farms","Congress Heights")]
+    df[missing_ASSESSMENT_NBHD,"ASSESSMENT_NBHD"]<-"Missing"
+    missing_INTWALL=c(1:nrow(df))[!df$INTWALL%in%c("Hardwood","Wood Floor","Hardwood/Carp","Carpet","Ceramic Tile","Lt Concrete")]
+    df[missing_INTWALL,"INTWALL"]<-"Missing"
+    missing_ROOF=c(1:nrow(df))[!df$ROOF%in%c("Built Up","Comp Shingle","Metal- Sms","Slate","Neopren","Clay Tile","Shingle",      
+                                             "Shake","Typical","Concrete Tile")]
+    df[missing_ROOF,"ROOF"]<-"Missing"
+    missing_EXTWALL=c(1:nrow(df))[!df$EXTWALL%in%c("Common Brick","Brick/Siding","Brick/Stucco","Stone","Stucco","Wood Siding",
+                                                   "Hardboard","Shingle","Brick/Stone","Face Brick","Vinyl Siding","Brick Veneer",
+                                                   "Stone/Siding","Stone/Stucco","Aluminum","Stone Veneer",  
+                                                   "Concrete Block","Concrete","Stucco Block","Metal Siding")]
+    df[missing_EXTWALL,"EXTWALL"]<-"Missing"
+    missing_CNDTN=c(1:nrow(df))[!df$CNDTN%in%c("Poor","Very Good","Good","Average","Fair","Excellent")]
+    df[missing_CNDTN,"CNDTN"]<-"Average"
+    missing_grade=c(1:nrow(df))[!df$GRADE%in%c("Above Average","Average","Low Quality","Superior","Good Quality","Exceptional-B",
+                                               "Exceptional-A","Excellent","Very Good","Exceptional-C","Fair Quality","Exceptional-D")]
+    df[missing_grade,"GRADE"]<-"Average"
+    missing_heat=c(1:nrow(df))[!df$HEAT%in%c("Hot Water Rad","Warm Cool","Forced Air","Ht Pump","Water Base Brd Air Exchng",
+                                             "Air-Oil","Gravity Furnac","Wall Furnace","Elec Base Brd")]
+    df[missing_heat,"HEAT"]<-"No Data"
+    missing_style=c(1:nrow(df))[!df$STYLE%in%c("2 Story","1.5 Story Fin","2.5 Story Fin","1 Story","3 Story","2.5 Story Unfin",
+                                               "4 Story","Split Level","1.5 Story Unfin","Bi-Level","Split Foyer")]
+    df[missing_style,"STYLE"]<-"Default"
+    
+    c_df<-df[,c("HEAT","AC","STYLE","GRADE","CNDTN","EXTWALL","ROOF","INTWALL","ASSESSMENT_NBHD",
+                "WARD","QUADRANT","ZIPCODE","GRADECUT","roof1")]
+    for (c in 1:ncol(c_df)){
+      c_df[,c]<-as.factor(as.character(c_df[,c]))
+    }
+    
+    c_df<-createDummyFeatures(c_df)
+    
+    df<-df[,!names(df)%in%c("HEAT","AC","STYLE","GRADE","CNDTN","EXTWALL","ROOF","INTWALL","ASSESSMENT_NBHD",
+                            "ASSESSMENT_SUBNBHD","WARD","QUADRANT","SALEDATE","ZIPCODE","GRADECUT","roof1")]
+    
+    df=cbind(c_df,df)
+    df=df[,!names(df)%in%c('Id','HEAT')]
+    
+    for (i in 1:ncol(df)){
+      df[is.na(df[,i]),i]<-Mode(df[!is.na(df[,i]),i])
+    }
+    
+    
+    return(df)
+  }
+
+```
+
+Prior to any model building, some safety checks are added into the data cleaning and transformation procedure. For both numeric and factor variables it is possible that missing data that is not present now may appear in the future. There are also many factor/character variables in our data. It is possible that on current or future test data, new factors may appear or this field may be no longer reported. 
+
+For all character values, there typically exists a "Default" value. For example the feature 'Heat' has a level "No Data". For all character values, if a factor exists for this variable that is not in the list of "Non Default" options, we adjust it to be this level, since this level has not been seen in training prior. Note, this is also an easy way to adjust for NA values which may appear as well. After making this adjustment to any training and test data. One-hot encoding is applied these values to create useful easy features for machine learning models to assess.
+
+Variables given this proceedure include:
+- Heat
+- Grade
+- Condition
+- Exterior Wall
+- Roof
+- Interior Wall
+- ASSESSMENT Neighbourhood
+- Quadrant 
+- Zipcode (Note this is a numeric variable but should be treated as a factor)
+
+
+For numeric data, the check of removing all missing values and mean imputing them, means a full variable by variable manual data cleaning will not be required for future data. 
+
+
+## Statistical Analysis 
+
+```{r}
+train=dat2[is.na(dat2$Id),1:(ncol(dat2)-2)]
+test=dat2[!is.na(dat2$Id),1:(ncol(dat2)-2)]
+val=dat2[(dat2$Usage=="Private"),1:(ncol(dat2)-2)]
+test_y=test$PRICE
+val_y=val$PRICE
+
+test=test[,names(test)!="PRICE"]
+val=val[,names(val)!="PRICE"]
+```
+
+
+3 Models can be applied to this dataset, both to understand which model has the best predictive power as well as to interpret which features have the strongest predictive power on the price of a D.C. home. Our target metric for this analysis is Root Mean Squared Log Error, meaning running models on the log transform of the Price is the best way to get strong results. 
+
+```{r,warning=FALSE}
+library(lattice)
+
+pub=c(0.23622,0.19424,0.17795)
+priv=c(0.23154,0.18018,0.16826)
+df=data.frame("score"=c(pub,priv),"name"=c("Smoothing","Random Forest","Boosting"))
+
+dotplot(score~name, data=df,
+        col=c("grey","grey","grey","firebrick","firebrick","firebrick"),cex=2,
+        xlab="Model",
+        ylab="Score (RMSLE)",
+        main="Private vs Public Scoring by Model")
+
+
+```
+
+There are multiple interesting insights from this chart, which motivate further analysis. Private scores are higher than the public score for all 3 models. Boosting yields the best results and smoothing yields the highest error. 
+
+
+```{r,eval=FALSE}
+f_train<-feature_eng(dat[dat$Usage=="Training",!names(dat)%in%c("Id",'Usage',"PRICE")])
+f_test<-feature_eng(dat[dat$Usage!="Training",!names(dat)%in%c("Id",'Usage','PRICE')])
+
+    
+f_train<-f_train[,names(f_train)[names(f_train)%in%names(f_test)]]
+f_test<-f_test[,names(f_test)[names(f_test)%in%names(f_train)]]
+
+set.seed(20607842)
+ 
+library(gbm)
+myGbm <- gbm((log(dat[dat$Usage=="Training","PRICE"]+1)) ~ . ,
+             distribution = "gaussian",
+             data = f_train,
+             n.trees =1100,
+             interaction.depth = 4,
+             shrinkage = 0.125)
+
+library(randomForest)
+
+fit<-randomForest(
+   formula = log(dat[dat$Usage=="Training","PRICE"]+1) ~ .,
+   data    = f_train,
+   num.trees = 500,
+   mtry=100
+)
+
+pre <- predict(fit, newdata=f_test)
+rf <- data.frame(Id=dat[dat$Usage!="Training","Id"], PRICE=exp(pred))
+
+pred <- predict(fit, newdata=f_test)
+boost <- data.frame(Id=dat[dat$Usage!="Training","Id"], PRICE=exp(pred))
+
+
+```
+
+
+
+Feature Engineering for Smoothing
+
+```{r,warning=FALSE}
+
+feature_eng_smooth<-function(df){
+  df$AYB[is.na(df$AYB)]<-mean(na.omit(df$AYB)) 
+  df$KITCHENS[is.na(df$KITCHENS)]<-mean(na.omit(df$KITCHENS)) 
+  
+  df$YEAR=year(df$SALEDATE)
+  df$MONTH=month(df$SALEDATE)
+  df$GOODZIP<-1*(df$ZIPCODE%in%c(20007,20008,20016,20037,20005))
+  df$ZIPCODE<-factor(df$ZIPCODE)
+  df$STORIESCUT<-1*(df$STORIES>2)
+  df$GRADECUT<-1*(df$GRADE%in%c("Excellent","Superior"))+
+    3*(df$GRADE%in%c("Exceptional-D","Exceptional-C","Exceptional-B","Exceptional-A"))+
+    2*(df$GRADE%in%c("Average","Low Quality","Average",'Above Average'))
+  
+  
+  df$roof1<-1*(df$ROOF%in%c("Slate","Shake","Shingle"))+
+    0*(df$ROOF%in%c("Built Up","Comp Shingle","Metal- Sms",'Typical',"Wood- FS","Composition Ro"))+
+    2*(df$ROOF%in%c("Clay Tile","Neopren","Metal- Cpr","Concrete Tile"))+
+    -1*(df$ROOF%in%c("Metal- Pre","Composition Ro","Comp Shingl"))
+  df$roof1<-factor(df$roof1)
+  
+  df$GRADECUT=factor(df$GRADECUT)
+  df$TEMP=1*(df$HEAT%in%c("Warm Cool","Forced Air"))
+  df$HFB=1*(df$HF_BATHRM>0)
+  df$FIRE=0*(df$FIREPLACES==0)+1*(df$FIREPLACES==1)+2*(df$FIREPLACES==2)+3*(df$FIREPLACES>2)
+  df$FIRE=factor(df$FIRE)
+  df$HOTMONTH=factor(1*(df$MONTH%in%c(4,5,6,7,8))+2*(df$MONTH==12))
+  df$AGE<-(df$YEAR-df$AYB)
+  df$BuiltAfter<-1*(df$AGE<0)
+  
+  
+  df$YEAR1=2006*(df$YEAR>2006)+2000*(df$YEAR<2000)+(df$YEAR>1999&df$YEAR<2007)*df$YEAR
+  
+  df$AGE_RENO<-df$YEAR-df$EYB
+  
+  df$Lat1<-1*(df$LATITUDE>38.905)
+  df$Lat1<-factor(df$Lat1)
+  
+  df$QUADRANT<-as.character(df$QUADRANT)
+  df$QUADRANT[is.na(df$QUADRANT)]<-"Unknown"
+  df$QUADRANT<-factor(df$QUADRANT)
+  
+  df$age_of_ren<-df$YR_RMDL-df$YEAR
+  df[is.na(df$age_of_ren),"age_of_ren"]<-df[is.na(df$age_of_ren),"EYB"]-df[is.na(df$age_of_ren),"YEAR"]
+  
+  df$INTWALL<-as.character(df$INTWALL)
+  
+  df$INTWALL[!(df$INTWALL%in%c("Carpet", "Ceramic Tile", "Default", "Hardwood", "Hardwood/Carp",
+                               "Lt Concrete", "Parquet","Terrazo", "Vinyl Sheet", "Wood Floor"))]<-"Default"
+  df$INTWALL[is.na(df$INTWALL)]<-"Default"
+  
+  return(df)
+}
+```
+
+
+```{r}
+
+library(mgcv)
+f_train2<-feature_eng_smooth(dat[dat$Usage=="Training",!names(dat)%in%c("Id",'Usage',"PRICE")])
+f_test2<-feature_eng_smooth(dat[dat$Usage=="Public",!names(dat)%in%c("Id",'Usage','PRICE')])
+
+fit_s=gam(log(dat[dat$Usage=="Training","PRICE"]+1)~YEAR1+log(GBA)+log(LANDAREA)+roof1+KITCHENS+FIREPLACES+age_of_ren+
+            AC+FIRE+ROOMS+GRADECUT+HFB+I(HFB+BATHRM)+WARD+INTWALL+I(AGE_RENO*(BuiltAfter))+
+            AGE_RENO^2+AGE+I(AGE_RENO^2*(BuiltAfter))+Lat1*LATITUDE+LONGITUDE,data=f_train2)
+
+```
+
+
+### Variable Importance
+
+```{r,eval=FALSE}
+library(caret)
+gb_imp=data.frame("Name"=row.names(varImp(myGbm,4)),"imp_gb"=(varImp(myGbm,4)))
+rownames(gb_imp)<-1:nrow(gb_imp)
+rf_imp=data.frame("Name"=row.names(varImp(fit)),"imp_rf"=(varImp(fit)))
+rownames(rf_imp)<-1:nrow(rf_imp)
+
+
+names(rf_imp)=c("imp_rf","Name")
+names(gb_imp)=c("imp_gb","Name")
+```
+
+```{r,warning=FALSE}
+comb=merge(rf_imp,gb_imp)
+comb$imp_rf<-round(comb$imp_rf/sum(comb$imp_rf),6)
+comb$imp_gb<-round(comb$imp_gb/sum(comb$imp_gb),6)
+comb$comb<-round((comb$imp_gb*0.17795+comb$imp_rf*0.19424)/(0.17795+0.19424),6)
+comb=comb[order(-comb$comb),]
+```
+
+Combining the random forest and gbm models, the top 13 variables and show a clear and distinct patter. 
+
+
+```{r,warning=FALSE}
+x<-barplot(comb[1:13,c(4)],
+        names.arg = comb[1:13,c(1)],
+        las=2,
+        cex.names = 0.68,
+        ylim=c(0,0.3),
+        col="firebrick",
+        xaxt="n",
+        ylab="Importance",
+        main="Most Important Variables")
+
+labs <- comb[1:13,c(1)]
+text(x=x-.25, y=-0.043, labs, xpd=TRUE, srt=45,
+     cex=0.9)
+
+```
+
+
+The factors which best predict the price of homes is Location, Time and Size. Recalling our map of the District with price overlayed, there was an obvious pattern. The NorthWest showed much more expensive homes then in the South and East. The model interpreted this through using Latitude and Longitude to learn this. Unsurprisinly, longitude was more important as an inspection shows a vertical line (at around long = -77.015) best partitions the red and black dots better than a single horizontal line.  
+
+```{r,warning=FALSE,results='hold',include = FALSE}
+library(ggmap)
+register_google(key = "AIzaSyBKmRB9-BIUQp_Asq3KI2Wuk_w-I0A2Vls")
+map <- get_map(location=c(lon=-77.0187,lat=38.91), maptype = "roadmap", zoom=12)
+```
+
+
+```{r,warning=FALSE}
+colp<-c()
+
+for (i in 1:20){
+   colp<-c(colp,rgb(0.05+i*0.035,0.05-0.0025*i,0.05-0.0025*i,1))
+}
+
+
+dat$Col <- colp[as.numeric(cut(dat$PRICE,breaks = quantile(dat$PRICE,seq(0,1,0.05))))]
+
+ggmap(map) + geom_point(aes(x=LONGITUDE, y=LATITUDE),alpha=0.09,color=dat$Col, data=dat)
+
+
+```
+
+The variable goodzip was an indicator variable on whether the home was in zip code 20007,20008,20016,20037 or 20005. Assessing the average price in these zipcodes they were strictly higher than the rest. Plotting only these homes, using the color coding these zipcodes clearly have some of the most reddest dots and most expensive homes. 
+
+```{r,warning=FALSE}
+colp<-c()
+
+for (i in 1:20){
+   colp<-c(colp,rgb(0.05+i*0.035,0.05-0.0025*i,0.05-0.0025*i,1))
+}
+
+
+dat$Col <- colp[as.numeric(cut(dat$PRICE,breaks = quantile(dat$PRICE,seq(0,1,0.05))))]
+
+ggmap(map) + geom_point(aes(x=LONGITUDE, y=LATITUDE),alpha=0.09,color=dat[dat$ZIPCODE%in%c(20007,20008,20016,20037,20005),]$Col, data=dat[dat$ZIPCODE%in%c(20007,20008,20016,20037,20005),])
+
+
+```
+
+The second most important factor in impacting home prices is timing. As seen in the exploratory analysis, there has been a strong increase in the price of DC homes, especially since 2006. The further in the past the home was sold homes were greatly cheaper and the magnitude of the difference makes it unsurprising this is a critical factor. 
+
+The final most imporant factor is land size. As seen in our exploratory analysis, Gross Building Area and Land area has strong and weak correlations when log transformations were taken and seeing them is not unsurprisingly. 
+
+Year of improvement is one of the lesser important variables. Plotting average sale price by year of improvement, it appears improvements made more recently have a stronger impact on price. Homes prices have increased greatly over time. This trend follows the overall price increase over time suggesting that newer homes sell for more money. A plot of Age of the home (Year-EYB) confirms this. This suggests that newer built homes sell for more money. 
+
+```{r,warning=FALSE}
+dat3$Age=year(dat3$SALEDATE)-dat$EYB
+d=ddply(dat3[dat3$Usage=="Training",],"EYB",function(x){mean(x$PRICE)})
+d2=ddply(dat3[dat3$Usage=="Training"&dat3$Age>0,],"Age",function(x){mean(x$PRICE)})
+
+plot(d[,1],d[,2]/100000,
+     xlab="Estimated Year of Improvements",
+     ylab="Average Price (in $100,000)",
+     main="Year of Improvements (EYB) vs Average Price",
+     pch=19,
+     yaxt="n",
+     col="darkblue")
+axis(2, at=axTicks(2), labels=sprintf("$%s", axTicks(2)))
+
+
+plot(d2[,1],d2[,2]/100000,
+       pch=19,
+     main="Age of Home vs Average Price",
+     xlab="Age of Home",
+     ylab="Average Price (in $100,000)",
+          yaxt="n",
+          col="darkblue")
+
+
+axis(2, at=axTicks(2), labels=sprintf("$%s", axTicks(2)))
+
+```
+
+
+
+During exploratory work, it was discovered that the majority of the homes in the dataset were from the NorthWest Quadrant. Plotting test error against quandrant, the NorthWest performed the best and the SouthWest the worst, and the other two Quadrants were roughly equal. This suggests we do not have enough data to accurately predict home prices in the SouthWest Quandrant and more data from the NorthEast and SouthEast would improve model accuracy. However, as discussed earlier this is difficult to acquire due to the distribution of residential land in Washington D.C. This is a limitation to the model as it is bias to the NorthWest Quadrant.   
+
+```{r,echo=FALSE,warning=FALSE}
+boost=read.csv("C:/Users/Jack/Desktop/Assignment 1/p4/pre8.csv")
+smooth=read.csv("C:/Users/Jack/Desktop/Assignment 1/p2/pre6.csv")
+rf=read.csv("C:/Users/Jack/Desktop/Assignment 1/p3/pre11.csv")
+```
+
+
+```{r,warning=FALSE}
+y_pub=dat[dat$Usage=="Public",c("Id","PRICE")]
+y_priv=dat[dat$Usage=="Private",c("Id","PRICE")]
+y_test=dat[dat$Usage%in%c("Private","Public"),c("Id","PRICE")]
+names(y_priv)=c("Id","pred")
+names(y_pub)=c("Id","pred")
+names(y_test)=c("Id","pred")
+
+```
+
+```{r,warning=FALSE}
+boost=merge(boost,y_test)
+rf=merge(rf,y_test)
+smooth=merge(smooth,y_test)
+
+names(boost)=c("Id",'boost_pred',"PRICE")
+names(rf)=c("Id",'rf_pred',"PRICE")
+names(smooth)=c("Id",'smooth_pred',"PRICE")
+```
+
+```{r,warning=FALSE}
+d=merge(boost,rf)
+d=merge(d,smooth)
+d=merge(d,dat[,c("Id","QUADRANT")])
+d$av_price=(d$boost_pred+d$rf_pred)/2
+gb=ddply(d[!is.na(d$QUADRANT),],"QUADRANT",function(x){(sqrt(mean((log(x$PRICE)-log(x$av_price))^2)))})
+gb=gb[order(gb[,2]),]
+barplot(gb[,2],
+        names.arg = gb[,1],
+        main="Test Error by Quadrant",
+        ylab="Root Mean Square Log Error",
+        xlab="Quadrant",
+        col="Firebrick",
+        ylim=c(0,0.4))
+
+```
+## Other Insights
+
+### Most Valuable Homes
+
+Bellow, a plot assesses where D.C.'s most expensive and least homes are. The most expensive homes (>4,500,000) are all grouped in the Georgetown area just North West of the White house. The least expensive homes (<$50,000) are all on the outskirts of the city on the south and easternmost points of the city.  
+
+```{r,warning=FALSE}
+colp<-c()
+
+for (i in 1:20){
+   colp<-c(colp,rgb(0.05+i*0.035,0.05-0.0025*i,0.05-0.0025*i,1))
+}
+
+
+ggmap(map) + geom_point(aes(x=LONGITUDE, y=LATITUDE),alpha=1,color="Red", data=dat[dat$PRICE>4500000,]) + geom_point(aes(x=LONGITUDE, y=LATITUDE),alpha=1,color="Black", data=dat[dat$PRICE<50000,])
+
+
+```
+
+## Conclusion
+
+From the analysis, it is clear the factors that one would expect to impact the price of a home are among those which impact the prices of homes in Washington D.C. the most, those being location, size and when the sale took place. The analysis shows that land and building size is important as well as a home being in desirable neighbourhoods with close proximity to the city center. The importance of time of sale also shows that there has been tremendous increases in home values in Washington D.C. particularely in between 2006 to 2018.  
